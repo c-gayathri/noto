@@ -1,0 +1,45 @@
+{
+  "name": "Nimbus — Notes",
+  "short_name": "Nimbus",
+  "description": "A calm place for everything you share.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6f8",
+  "theme_color": "#f5f6f8",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/save",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": ["*/*"]
+        },
+        {
+          "name": "media",
+          "accept": ["image/*", "video/*", "audio/*"]
+        }
+      ]
+    }
+  }
+}
