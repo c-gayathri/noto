@@ -1,49 +1,38 @@
-import { useState } from 'react'
 import { Icon, type IconName } from './Icon'
 
+export type CreateOptionKind = 'text' | 'voice' | 'file' | 'folder' | 'flashcards' | 'templates'
+
 interface CreateOption {
+  kind: CreateOptionKind
   icon: IconName
   tint: string
   title: string
   subtitle: string
-  onSelect: () => void
+}
+
+const ALL_OPTIONS: Record<CreateOptionKind, CreateOption> = {
+  text: { kind: 'text', icon: 'edit', tint: 'var(--t-blue)', title: 'Text Note', subtitle: 'Write something' },
+  voice: { kind: 'voice', icon: 'mic', tint: 'var(--t-purple)', title: 'Voice Note', subtitle: 'Record your thoughts' },
+  file: { kind: 'file', icon: 'file', tint: 'var(--t-orange)', title: 'File', subtitle: 'Add photos, docs or files' },
+  folder: { kind: 'folder', icon: 'folder', tint: 'var(--t-teal)', title: 'Folder', subtitle: 'Organize your notes' },
+  flashcards: { kind: 'flashcards', icon: 'cards', tint: 'var(--t-pink)', title: 'Flashcards', subtitle: 'Study and remember' },
+  templates: { kind: 'templates', icon: 'copy', tint: 'var(--t-green)', title: 'From Template', subtitle: 'Start from a layout' },
 }
 
 export function CreateMenu({
   open,
   onClose,
-  onText,
-  onVoice,
-  onFile,
-  onFolder,
-  onFlashcards,
-  onTemplates,
+  kinds,
+  onSelect,
 }: {
   open: boolean
   onClose: () => void
-  onText: () => void
-  onVoice: () => void
-  onFile: () => void
-  onFolder: () => void
-  onFlashcards: () => void
-  onTemplates: () => void
+  kinds: CreateOptionKind[]
+  onSelect: (kind: CreateOptionKind) => void
 }) {
-  const [closing, setClosing] = useState(false)
   if (!open) return <span />
 
-  const options: CreateOption[] = [
-    { icon: 'edit', tint: 'var(--t-blue)', title: 'Text Note', subtitle: 'Write something', onSelect: onText },
-    { icon: 'mic', tint: 'var(--t-purple)', title: 'Voice Note', subtitle: 'Record your thoughts', onSelect: onVoice },
-    { icon: 'file', tint: 'var(--t-orange)', title: 'File', subtitle: 'Add photos, docs or files', onSelect: onFile },
-    { icon: 'folder', tint: 'var(--t-teal)', title: 'Folder', subtitle: 'Organize your notes', onSelect: onFolder },
-    { icon: 'cards', tint: 'var(--t-pink)', title: 'Flashcards', subtitle: 'Study and remember', onSelect: onFlashcards },
-    { icon: 'copy', tint: 'var(--t-green)', title: 'From Template', subtitle: 'Journal, list, meeting…', onSelect: onTemplates },
-  ]
-
-  const close = (fn?: () => void) => {
-    if (fn) fn()
-    onClose()
-  }
+  const options = kinds.map((k) => ALL_OPTIONS[k])
 
   return (
     <div className="scrim scrim-dark" onClick={onClose}>
@@ -52,9 +41,16 @@ export function CreateMenu({
           <h3 className="create-menu-title">What would you like to create?</h3>
           <div className="create-menu-list">
             {options.map((o) => (
-              <button key={o.title} className="create-option" onClick={() => close(o.onSelect)}>
+              <button
+                key={o.kind}
+                className="create-option"
+                onClick={() => {
+                  onSelect(o.kind)
+                  onClose()
+                }}
+              >
                 <span className="create-option-icon" style={{ background: o.tint }}>
-                  <Icon name={o.icon} size={21} />
+                  <Icon name={o.icon} size={20} />
                 </span>
                 <span className="create-option-text">
                   <span className="create-option-title">{o.title}</span>

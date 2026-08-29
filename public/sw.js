@@ -1,5 +1,5 @@
 /* Nimbus service worker: offline shell + Web Share Target ingestion */
-const VERSION = 'nimbus-v1'
+const VERSION = 'noto-v2'
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg']
 
 self.addEventListener('install', (event) => {
@@ -106,7 +106,7 @@ self.addEventListener('fetch', (event) => {
 
 // Let the app consume + clear the pending share payload
 self.addEventListener('message', (event) => {
-  if (event.data === 'nimbus:clear-share') {
+  if (event.data === 'noto:clear-share') {
     caches.delete(VERSION + '-share')
   }
 })

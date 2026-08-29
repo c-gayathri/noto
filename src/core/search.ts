@@ -15,19 +15,66 @@ export interface SearchResults {
   files: { file: StoredFile; note: Note | null }[]
 }
 
+/**
+ * Everything visible, used as the initial state of the search screen:
+ * opening search shows all folders, notes and standalone files; typing
+ * filters them down (see searchAll).
+ */
+export async function browseAll(): Promise<SearchResults> {
+  const [notes, folders, files] = await Promise.all([
+    db.notes.filter((n) => !n.archived && !n.locked).toArray(),
+    db.folders.filter((f) => !f.archived && !f.locked).toArray(),
+    db.files.toArray(),
+  ])
+
+  const referenced = new Set<string>()
+  for (const n of notes) {
+    for (const b of n.blocks) {
+      if (b.type === 'image' || b.type === 'file' || b.type === 'audio') referenced.add(b.fileId)
+      if (b.type === 'flashcards') {
+        for (const c of b.cards) {
+          if (c.frontImageId) referenced.add(c.frontImageId)
+          if (c.backImageId) referenced.add(c.backImageId)
+        }
+      }
+    }
+  }
+
+  const noteForFile = new Map<string, Note>()
+  for (const n of notes) {
+    for (const b of n.blocks) {
+      if ((b.type === 'image' || b.type === 'file' || b.type === 'audio') && !noteForFile.has(b.fileId)) {
+        noteForFile.set(b.fileId, n)
+      }
+    }
+  }
+
+  const standalone = files
+    .filter((f) => !referenced.has(f.id))
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((f) => ({ file: f, note: noteForFile.get(f.id) ?? null }))
+
+  return {
+    folders: folders.sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name)),
+    notes: notes.sort((a, b) => b.updatedAt - a.updatedAt),
+    files: standalone,
+  }
+}
+
 export async function searchAll(rawQuery: string): Promise<SearchResults> {
   const q = rawQuery.trim().toLowerCase()
-  if (!q) return { notes: [], folders: [], files: [] }
+  if (!q) return browseAll()
 
   const [notes, folders, files] = await Promise.all([
-    db.notes.filter((n) => !n.archived).toArray(),
-    db.folders.filter((f) => !f.archived).toArray(),
+    db.notes.filter((n) => !n.archived && !n.locked).toArray(),
+    db.folders.filter((f) => !f.archived && !f.locked).toArray(),
     db.files.toArray(),
   ])
 
   const matchedFolders = folders.filter((f) => f.name.toLowerCase().includes(q))
 
   const noteMatches = (n: Note): boolean => {
+    if (n.locked) return false
     if (n.title.toLowerCase().includes(q)) return true
     for (const b of n.blocks) {
       switch (b.type) {

@@ -31,7 +31,7 @@ function fire(note: Note) {
     try {
       new Notification(body, {
         body: 'Reminder from Nimbus',
-        tag: `nimbus-reminder-${note.id}-${note.reminder?.at}`,
+        tag: `noto-reminder-${note.id}-${note.reminder?.at}`,
       })
     } catch {
       /* some platforms require SW registration for notifications */

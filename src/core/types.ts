@@ -3,12 +3,14 @@
 export type ID = string
 
 export type ColorKey =
-  | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'yellow' | 'teal' | 'gray'
+  | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'yellow' | 'teal'
+  | 'coral' | 'mint' | 'gray'
 
 export interface Folder {
   id: ID
   name: string
-  color: ColorKey
+  /** null = no color selected (neutral). */
+  color: ColorKey | null
   pinned: boolean
   locked: boolean
   archived: boolean
@@ -33,7 +35,7 @@ export interface Flashcard {
 
 export type NoteBlock =
   | { id: ID; type: 'text'; html: string }
-  | { id: ID; type: 'image'; fileId: ID; caption?: string }
+  | { id: ID; type: 'image'; fileId: ID; caption?: string; width?: number }
   | { id: ID; type: 'file'; fileId: ID }
   | { id: ID; type: 'audio'; fileId: ID; transcript?: string; duration?: number }
   | { id: ID; type: 'checklist'; items: ChecklistItem[] }
@@ -91,6 +93,15 @@ export interface OutboxEntry {
   entity: 'note' | 'folder' | 'file'
   op: 'upsert' | 'delete'
   entityId: ID
+}
+
+/** User-created template: a frozen note layout. */
+export interface CustomTemplate {
+  id: ID
+  name: string
+  emoji: string
+  blocks: NoteBlock[]
+  createdAt: number
 }
 
 export type SyncProviderId = 'local' | 'drive'

@@ -24,7 +24,7 @@ export async function createFolder(init: Partial<Folder> = {}): Promise<Folder> 
   const folder: Folder = {
     id: uid('f_'),
     name: init.name?.trim() || 'Untitled folder',
-    color: init.color ?? 'blue',
+    color: init.color ?? null,
     pinned: init.pinned ?? false,
     locked: init.locked ?? false,
     archived: false,

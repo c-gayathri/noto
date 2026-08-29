@@ -33,6 +33,7 @@ export function Study() {
   const [order, setOrder] = useState<number[] | null>(null)
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
+  const [shuffled, setShuffled] = useState(false)
   const [dragX, setDragX] = useState(0)
   const startRef = useRef<number | null>(null)
 
@@ -71,15 +72,29 @@ export function Study() {
     )
   }
 
-  const shuffle = () => {
-    const next = [...deckOrder]
+  const shuffleOrder = (): number[] => {
+    const next = cards.map((_, i) => i)
     for (let i = next.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[next[i], next[j]] = [next[j], next[i]]
     }
-    setOrder(next)
+    return next
+  }
+
+  const toggleShuffle = () => {
+    const on = !shuffled
+    setShuffled(on)
+    setOrder(on ? shuffleOrder() : null)
     setIndex(0)
     setFlipped(false)
+    vibrate(8)
+  }
+
+  const restart = () => {
+    setOrder(shuffled ? shuffleOrder() : null)
+    setIndex(0)
+    setFlipped(false)
+    vibrate(8)
   }
 
   const go = (dir: 1 | -1) => {
@@ -93,11 +108,20 @@ export function Study() {
       <TopBar
         back
         title={note.title || 'Study'}
-        subtitle={`${index + 1} of ${cards.length}`}
+        subtitle={`${index + 1}/${cards.length}`}
         right={
-          <button className="icon-btn" onClick={shuffle} aria-label="Shuffle">
-            <Icon name="refresh" size={19} />
-          </button>
+          <>
+            <button
+              className={cn('icon-btn', shuffled && 'icon-btn-shuffle')}
+              onClick={toggleShuffle}
+              aria-label={shuffled ? 'Shuffle on' : 'Shuffle off'}
+            >
+              <Icon name="shuffle" size={18} />
+            </button>
+            <button className="icon-btn" onClick={restart} aria-label="Restart deck">
+              <Icon name="refresh" size={18} />
+            </button>
+          </>
         }
       />
 
@@ -152,10 +176,6 @@ export function Study() {
         >
           <Icon name="chevron-right" size={22} />
         </button>
-      </div>
-
-      <div className="study-progress">
-        <span style={{ width: `${((index + 1) / cards.length) * 100}%` }} />
       </div>
     </div>
   )

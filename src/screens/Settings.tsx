@@ -49,13 +49,13 @@ export function SettingsScreen() {
 
   const setupPasscode = async () => {
     const code = await dialogs.prompt({
-      title: 'Choose a 4–6 digit passcode',
-      placeholder: '••••••',
+      title: 'Choose a 4-digit passcode',
+      placeholder: '••••',
       confirmLabel: 'Continue',
     })
     if (!code) return
-    if (!/^\d{4,6}$/.test(code)) {
-      toast.show('Use 4 to 6 digits', 'alert')
+    if (!/^\d{4}$/.test(code)) {
+      toast.show('Use exactly 4 digits', 'alert')
       return
     }
     await lock.setPasscode(code)
@@ -70,10 +70,10 @@ export function SettingsScreen() {
       toast.show('Wrong passcode', 'alert')
       return
     }
-    const next = await dialogs.prompt({ title: 'New 4–6 digit passcode', confirmLabel: 'Save' })
+    const next = await dialogs.prompt({ title: 'New 4-digit passcode', placeholder: '••••', confirmLabel: 'Save' })
     if (!next) return
-    if (!/^\d{4,6}$/.test(next)) {
-      toast.show('Use 4 to 6 digits', 'alert')
+    if (!/^\d{4}$/.test(next)) {
+      toast.show('Use exactly 4 digits', 'alert')
       return
     }
     await lock.setPasscode(next)
@@ -114,7 +114,7 @@ export function SettingsScreen() {
       }))
     )
     const backup = {
-      app: 'nimbus-notes',
+      app: 'noto-notes',
       version: 1,
       exportedAt: Date.now(),
       folders,
@@ -123,7 +123,7 @@ export function SettingsScreen() {
     }
     downloadBlob(
       new Blob([JSON.stringify(backup)], { type: 'application/json' }),
-      `nimbus-backup-${new Date().toISOString().slice(0, 10)}.json`
+      `noto-backup-${new Date().toISOString().slice(0, 10)}.json`
     )
     toast.show('Backup downloaded', 'download')
   }
@@ -131,7 +131,7 @@ export function SettingsScreen() {
   const importBackup = async (file: File) => {
     try {
       const data = JSON.parse(await file.text())
-      if (data.app !== 'nimbus-notes') throw new Error('bad file')
+      if (data.app !== 'noto-notes' && data.app !== 'nimbus-notes') throw new Error('bad file')
       await db.transaction('rw', db.folders, db.notes, db.files, async () => {
         for (const f of data.folders) await db.folders.put(f)
         for (const n of data.notes) await db.notes.put(n)
@@ -192,9 +192,10 @@ export function SettingsScreen() {
             <ActionRow
               icon="lock"
               label="Lock now"
+              sub="Hide locked content until you enter the passcode again"
               onClick={() => {
                 lockNow()
-                toast.show('Locked', 'lock')
+                toast.show('Locked — private content is hidden', 'lock')
                 navigate('/')
               }}
             />
@@ -245,7 +246,7 @@ export function SettingsScreen() {
         <ActionRow
           icon="upload"
           label="Import backup"
-          sub="Restore from a Nimbus backup file"
+          sub="Restore from a Noto backup file"
           onClick={() => {
             const input = document.getElementById('backup-input') as HTMLInputElement | null
             input?.click()
@@ -269,7 +270,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       <SettingsSection title="About">
-        <ActionRow icon="info" label="Nimbus" sub="Version 0.1.0 · local-first prototype" />
+        <ActionRow icon="info" label="Noto" sub="Version 0.2.0 · local-first prototype" />
         <p className="settings-note">
           Anything you can share from your phone, you can save here — instantly, privately,
           and offline.

@@ -14,6 +14,7 @@ import { SaveTo } from '@/screens/SaveTo'
 import { SearchScreen } from '@/screens/SearchScreen'
 import { SettingsScreen } from '@/screens/Settings'
 import { Study } from '@/screens/Study'
+import { LockedView } from '@/screens/LockedView'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/save" element={<SaveTo />} />
               <Route path="/search" element={<SearchScreen />} />
               <Route path="/settings" element={<SettingsScreen />} />
+              <Route path="/locked" element={<LockedView />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </LockProvider>

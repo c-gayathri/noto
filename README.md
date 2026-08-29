@@ -1,13 +1,13 @@
-# Nimbus — mobile-first notes & documentation app
+# Noto — mobile-first notes & documentation app
 
 > Anything you can share from your phone should be something you can save here immediately.
 
-Nimbus is a local-first notes app for people who currently use WhatsApp chats as an
+Noto is a local-first notes app for people who currently use WhatsApp chats as an
 informal storage system. Share a PDF, photo, link, audio or text from any app →
 pick a folder → done. No account required, works fully offline.
 
 Built as a **React + TypeScript PWA** (Vite). The Web Share Target API makes
-"Share → Nimbus" work on Android/installed PWA; IndexedDB keeps everything on
+"Share → Noto" work on Android/installed PWA; IndexedDB keeps everything on
 device; the sync layer is isolated so Google Drive can be added later without
 touching UI or storage code.
 
@@ -20,7 +20,7 @@ npm run build      # typecheck + production build
 npm run preview    # serve the production build
 ```
 
-For the real "Share → Nimbus" flow, deploy over HTTPS and install the PWA
+For the real "Share → Noto" flow, deploy over HTTPS and install the PWA
 (Android Chrome: Install app). The service worker (`public/sw.js`) receives
 shared files and hands them to the Save-to screen.
 

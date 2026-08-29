@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { searchAll, type SearchResults } from '@/core/search'
+import { searchAll, browseAll, type SearchResults } from '@/core/search'
 import { fileKind } from '@/core/utils'
 import { useStoredFile } from '@/core/fileStore'
 import { Icon } from '@/ui/Icon'
@@ -22,18 +22,14 @@ export function SearchScreen() {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<Scope>('all')
   const [results, setResults] = useState<SearchResults>({ notes: [], folders: [], files: [] })
-  const [searched, setSearched] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(async () => {
-      if (!query.trim()) {
-        setResults({ notes: [], folders: [], files: [] })
-        setSearched(false)
-        return
-      }
-      const r = await searchAll(query)
+      // Empty query shows everything; typing filters it down.
+      const r = await (query.trim() ? searchAll(query) : browseAll())
       setResults(r)
-      setSearched(true)
+      setLoaded(true)
     }, 180)
     return () => clearTimeout(t)
   }, [query])
@@ -41,7 +37,7 @@ export function SearchScreen() {
   const showNotes = (scope === 'all' || scope === 'notes') && results.notes.length > 0
   const showFolders = (scope === 'all' || scope === 'folders') && results.folders.length > 0
   const showFiles = (scope === 'all' || scope === 'files') && results.files.length > 0
-  const empty = searched && !showNotes && !showFolders && !showFiles
+  const empty = loaded && !showNotes && !showFolders && !showFiles
 
   return (
     <div className="screen">
@@ -123,8 +119,8 @@ export function SearchScreen() {
         {empty && (
           <EmptyState icon="search" title="No matches" sub={`Nothing found for “${query}”.`} />
         )}
-        {!searched && (
-          <p className="search-hint">Search across note titles, note text, folder names and file names. Transcripts and document text are indexed automatically as they become available.</p>
+        {!query.trim() && (
+          <p className="search-hint">Everything you have, ready to filter — start typing to narrow it down.</p>
         )}
       </section>
     </div>

@@ -3,16 +3,22 @@ import type { ID } from '@/core/types'
 import { vibrate } from '@/core/utils'
 
 /* ------------------------------------------------------------------ */
-/* Long-press drag of a note card onto a folder drop target.          */
-/* Drop targets declare: data-drop-folder="<folderId | __unfile__>".  */
-/* Works on touch + mouse. Deliberately small and dependency-free.    */
+/* Long-press gestures on note cards:                                 */
+/*   · hold + drag     → drop onto a folder ([data-drop-folder]) or   */
+/*                       the trash bubble ([data-drop="trash"])       */
+/*   · hold + release  → enter multi-select (callback)                */
+/* Works on touch + mouse. Dependency-free.                           */
 /* ------------------------------------------------------------------ */
 
 const UNFILE = '__unfile__'
-const LONG_PRESS_MS = 240
+const LONG_PRESS_MS = 260
 const MOVE_TOLERANCE = 8
 
-export function useNoteDrag(onDrop: (noteId: ID, folderId: ID | null) => void) {
+export function useNoteDrag(
+  onDrop: (noteId: ID, folderId: ID | null) => void,
+  onTrash?: (noteId: ID) => void,
+  onLongPressRelease?: (noteId: ID) => void
+) {
   const [draggingId, setDraggingId] = useState<ID | null>(null)
   const [overTarget, setOverTarget] = useState<string | null>(null)
   const press = useRef<{
@@ -21,9 +27,12 @@ export function useNoteDrag(onDrop: (noteId: ID, folderId: ID | null) => void) {
     startX: number
     startY: number
     active: boolean
-    justDropped: boolean
+    moved: boolean
+    suppressClick: boolean
   } | null>(null)
   const ghost = useRef<HTMLElement | null>(null)
+  const overRef = useRef<string | null>(null)
+  overRef.current = overTarget
 
   const clearGhost = () => {
     ghost.current?.remove()
@@ -49,55 +58,58 @@ export function useNoteDrag(onDrop: (noteId: ID, folderId: ID | null) => void) {
     el.classList.add('drag-origin')
 
     const move = (ev: PointerEvent) => {
+      if (!press.current) return
+      press.current.moved = true
       if (!ghost.current) return
       ghost.current.style.transform = `translate(${ev.clientX - rect.width / 2}px,${ev.clientY - 28}px) rotate(2deg)`
       ghost.current.style.display = 'none'
       const under = document.elementFromPoint(ev.clientX, ev.clientY)
       ghost.current.style.display = ''
-      const target = under?.closest('[data-drop-folder]') as HTMLElement | null
+      const target =
+        under?.closest('[data-drop-folder],[data-drop="trash"]') as HTMLElement | null
       document.querySelectorAll('.drop-hover').forEach((n) => n.classList.remove('drop-hover'))
+      const key = target
+        ? target.dataset.drop === 'trash'
+          ? 'trash'
+          : target.dataset.dropFolder ?? null
+        : null
       if (target) {
         target.classList.add('drop-hover')
-        setOverTarget(target.dataset.dropFolder ?? null)
-      } else {
-        setOverTarget(null)
       }
+      setOverTarget(key)
     }
 
-    const finish = (ev: PointerEvent) => {
+    const finish = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
-      const wasActive = press.current?.active
-      const targetId = overTargetRef.current
+      const cur = press.current
       el.classList.remove('drag-origin')
       clearGhost()
       setDraggingId(null)
       setOverTarget(null)
-      if (wasActive && targetId) {
-        if (press.current) press.current.justDropped = true
-        onDrop(p.id, targetId === UNFILE ? null : targetId)
-        setTimeout(() => {
-          if (press.current) press.current.justDropped = false
-        }, 300)
-      } else if (wasActive) {
-        // tapped-and-held without a target: treat as a no-op
-        if (press.current) press.current.justDropped = true
-        setTimeout(() => {
-          if (press.current) press.current.justDropped = false
-        }, 300)
+      if (!cur) return
+      cur.suppressClick = true
+      setTimeout(() => {
+        if (press.current === cur) press.current = null
+        else cur.suppressClick = false
+      }, 350)
+
+      if (cur.moved && overRef.current === 'trash' && onTrash) {
+        onTrash(cur.id)
+      } else if (cur.moved && overRef.current && overRef.current !== 'trash') {
+        onDrop(cur.id, overRef.current === UNFILE ? null : overRef.current)
+      } else if (!cur.moved && onLongPressRelease) {
+        // held, then released without dragging → multi-select gesture
+        onLongPressRelease(cur.id)
       }
       press.current = null
-      void ev
     }
 
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
   }
-
-  const overTargetRef = useRef<string | null>(null)
-  overTargetRef.current = overTarget
 
   const bind = (noteId: ID) => ({
     'data-note-id': noteId,
@@ -107,22 +119,36 @@ export function useNoteDrag(onDrop: (noteId: ID, folderId: ID | null) => void) {
       const startX = e.clientX
       const startY = e.clientY
       const timer = window.setTimeout(() => activate(el, e.nativeEvent), LONG_PRESS_MS)
-      press.current = { id: noteId, timer, startX, startY, active: false, justDropped: false }
+      press.current = {
+        id: noteId,
+        timer,
+        startX,
+        startY,
+        active: false,
+        moved: false,
+        suppressClick: false,
+      }
 
       const interrupt = (ev: PointerEvent) => {
         const p = press.current
         if (!p || p.active) return
-        if (Math.abs(ev.clientX - startX) > MOVE_TOLERANCE || Math.abs(ev.clientY - startY) > MOVE_TOLERANCE) {
+        if (
+          Math.abs(ev.clientX - startX) > MOVE_TOLERANCE ||
+          Math.abs(ev.clientY - startY) > MOVE_TOLERANCE
+        ) {
           clearTimeout(timer)
           window.removeEventListener('pointermove', interrupt)
         }
       }
       window.addEventListener('pointermove', interrupt)
-      const cleanupInterrupt = () => window.removeEventListener('pointermove', interrupt)
-      window.addEventListener('pointerup', cleanupInterrupt, { once: true })
+      window.addEventListener(
+        'pointerup',
+        () => window.removeEventListener('pointermove', interrupt),
+        { once: true }
+      )
     },
     onClickCapture: (e: React.MouseEvent) => {
-      if (press.current?.justDropped || press.current?.active) {
+      if (press.current?.suppressClick) {
         e.preventDefault()
         e.stopPropagation()
       }

@@ -2,9 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { vibrate } from '@/core/utils'
 
 /* ------------------------------------------------------------------ */
-/* Minimal pointer-based vertical drag-to-reorder.                    */
-/* Works with touch + mouse via a grab handle. No dependencies.       */
+/* Minimal pointer-based vertical drag-to-reorder with optional drop  */
+/* zones (e.g. a floating trash). Touch + mouse, no dependencies.     */
 /* ------------------------------------------------------------------ */
+
+export interface DropZone {
+  /** CSS selector for the zone element, e.g. '[data-block-drop="trash"]' */
+  selector: string
+  id: string
+}
 
 interface DragState {
   index: number
@@ -12,17 +18,26 @@ interface DragState {
   startY: number
   y: number
   height: number
+  zone: string | null
 }
 
-export function useDragSort(count: number, onReorder: (from: number, to: number) => void) {
+export function useDragSort(
+  count: number,
+  onReorder: (from: number, to: number) => void,
+  dropZones: DropZone[] = [],
+  onDropZone?: (index: number, zone: string) => void
+) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const itemRefs = useRef<Array<HTMLElement | null>>([])
   const dragRef = useRef<DragState | null>(null)
   dragRef.current = drag
 
-  const setItemRef = useCallback((i: number) => (el: HTMLElement | null) => {
-    itemRefs.current[i] = el
-  }, [])
+  const setItemRef = useCallback(
+    (i: number) => (el: HTMLElement | null) => {
+      itemRefs.current[i] = el
+    },
+    []
+  )
 
   const onHandleDown = useCallback(
     (index: number, e: React.PointerEvent) => {
@@ -37,6 +52,7 @@ export function useDragSort(count: number, onReorder: (from: number, to: number)
         startY: e.clientY,
         y: e.clientY,
         height: rect.height,
+        zone: null,
       }
       setDrag(state)
       vibrate(8)
@@ -51,13 +67,24 @@ export function useDragSort(count: number, onReorder: (from: number, to: number)
           if (i === cur.index) continue
           const r = itemRefs.current[i]?.getBoundingClientRect()
           if (!r) continue
-          if (i < cur.index && midY < r.top + r.height / 2) {
-            target = Math.min(target, i)
-          } else if (i > cur.index && midY > r.top + r.height / 2) {
-            target = Math.max(target, i)
+          if (i < cur.index && midY < r.top + r.height / 2) target = Math.min(target, i)
+          else if (i > cur.index && midY > r.top + r.height / 2) target = Math.max(target, i)
+        }
+        let zone: string | null = null
+        if (dropZones.length) {
+          for (const z of dropZones) {
+            if (document.querySelector(z.selector)?.matches(':hover') === true) {
+              zone = z.id
+              break
+            }
+          }
+          if (!zone) {
+            const under = document.elementFromPoint(ev.clientX, ev.clientY)
+            const hit = under?.closest(dropZones.map((z) => z.selector).join(','))
+            zone = hit ? (hit as HTMLElement).dataset.blockDrop ?? (hit as HTMLElement).dataset.drop ?? null : null
           }
         }
-        setDrag({ ...cur, y, target })
+        setDrag({ ...cur, y, target, zone })
       }
 
       const up = () => {
@@ -65,7 +92,11 @@ export function useDragSort(count: number, onReorder: (from: number, to: number)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', up)
         setDrag((cur) => {
-          if (cur && cur.target !== cur.index) onReorder(cur.index, cur.target)
+          if (cur && cur.zone && onDropZone) {
+            onDropZone(cur.index, cur.zone)
+          } else if (cur && cur.target !== cur.index) {
+            onReorder(cur.index, cur.target)
+          }
           return null
         })
       }
@@ -73,7 +104,7 @@ export function useDragSort(count: number, onReorder: (from: number, to: number)
       window.addEventListener('pointerup', up)
       window.addEventListener('pointercancel', up)
     },
-    [onReorder]
+    [onReorder, dropZones, onDropZone]
   )
 
   useEffect(() => {
@@ -87,16 +118,27 @@ export function useDragSort(count: number, onReorder: (from: number, to: number)
         ref: setItemRef(index) as (el: HTMLDivElement | null) => void,
         style: {
           ...(drag && drag.index === index
-            ? { opacity: 0.35, transform: `translateY(${drag.y - drag.startY}px)`, zIndex: 10 }
+            ? {
+                opacity: drag.zone ? 0.25 : 0.4,
+                transform: `translateY(${drag.y - drag.startY}px)`,
+                zIndex: 10,
+              }
             : {}),
         } as React.CSSProperties,
       }
     }
-    const shift = index > drag.index && index <= drag.target
-      ? -drag.height
-      : index < drag.index && index >= drag.target
-        ? drag.height
-        : 0
+    if (drag.zone) {
+      return {
+        ref: setItemRef(index) as (el: HTMLDivElement | null) => void,
+        style: { opacity: 0.55 } as React.CSSProperties,
+      }
+    }
+    const shift =
+      index > drag.index && index <= drag.target
+        ? -drag.height
+        : index < drag.index && index >= drag.target
+          ? drag.height
+          : 0
     return {
       ref: setItemRef(index) as (el: HTMLDivElement | null) => void,
       style: { transform: `translateY(${shift}px)`, transition: 'transform 160ms ease' } as React.CSSProperties,
@@ -108,5 +150,5 @@ export function useDragSort(count: number, onReorder: (from: number, to: number)
     style: { touchAction: 'none' } as React.CSSProperties,
   })
 
-  return { itemProps, handleProps, dragging: !!drag }
+  return { itemProps, handleProps, dragging: !!drag, dragIndex: drag?.index ?? null, dragZone: drag?.zone ?? null }
 }

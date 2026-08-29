@@ -115,9 +115,9 @@ function UnlockOverlay({
   }
 
   const press = (digit: string) => {
-    const next = (code + digit).slice(0, 6)
+    const next = (code + digit).slice(0, 4)
     setCode(next)
-    if (next.length === 6) submit(next)
+    if (next.length === 4) submit(next)
   }
 
   const tryBiometric = async () => {
@@ -142,7 +142,7 @@ function UnlockOverlay({
         <h2>Private content</h2>
         <p className="unlock-sub">Enter your passcode to continue</p>
         <div className={`unlock-dots ${error ? 'unlock-dots-error' : ''}`}>
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <span key={i} className={`unlock-dot ${i < code.length ? 'filled' : ''}`} />
           ))}
         </div>

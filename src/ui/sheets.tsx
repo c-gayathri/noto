@@ -6,10 +6,11 @@ import * as repo from '@/core/repo'
 import * as lock from '@/core/lock'
 import { exportImage, exportPDF, exportText, noteToPlainText, type ExportLayout } from '@/core/export'
 import { shareFiles } from '@/core/fileStore'
-import { colorOf } from '@/core/palette'
-import { TEMPLATES } from '@/core/templates'
+import { HEX } from '@/core/palette'
+import { TEMPLATES, getCustomTemplates, saveNoteAsTemplate, deleteCustomTemplate } from '@/core/templates'
 import { formatDateTime, formatBytes } from '@/core/utils'
-import type { Folder, Note, ReminderRecurrence } from '@/core/types'
+import type { CustomTemplate, Folder, Note, NoteBlock, ReminderRecurrence } from '@/core/types'
+import type { Template } from '@/core/templates'
 import { Sheet } from './Sheet'
 import { Icon } from './Icon'
 import { ColorPicker } from './ColorPicker'
@@ -175,6 +176,22 @@ export function NoteActionsSheet({
             }}
           />
           <ActionRow
+            icon="bookmark"
+            label="Save as template"
+            sub="Reuse this layout from the + menu"
+            onClick={async () => {
+              const name = await dialogs.prompt({
+                title: 'Save as template',
+                initial: note.title || 'My template',
+                confirmLabel: 'Save',
+              })
+              if (!name) return
+              await saveNoteAsTemplate(name, note.blocks)
+              toast.show('Template saved', 'check')
+              onClose()
+            }}
+          />
+          <ActionRow
             icon="archive"
             label={note.archived ? 'Unarchive' : 'Archive'}
             onClick={async () => {
@@ -295,17 +312,28 @@ function MoveEditor({ note, onDone }: { note: Note; onDone: () => void }) {
     return map
   }, [], new Map<string, number>())
   const [selected, setSelected] = useState<string | null>(note.folderId)
+  const [extraFolders, setExtraFolders] = useState<Folder[]>([])
+  const dialogs = useDialogs()
   const toast = useToast()
 
-  const sorted = [...(folders ?? [])].sort(
+  const sorted = [...(folders ?? []), ...extraFolders].sort(
     (a, b) => Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name)
   )
+
+  const newFolder = async () => {
+    const name = await dialogs.prompt({ title: 'New folder', placeholder: 'Folder name', confirmLabel: 'Create' })
+    if (!name) return
+    const folder = await repo.createFolder({ name })
+    setExtraFolders((list) => [...list, folder])
+    setSelected(folder.id)
+    toast.show(`Folder “${name}” created`, 'folder')
+  }
 
   return (
     <div>
       <SectionLabel>Choose a destination</SectionLabel>
       <FolderRow
-        folder={{ id: '__unfile__', name: 'Unfiled', color: 'gray', pinned: false, locked: false, archived: false, offline: false, createdAt: 0, updatedAt: 0 }}
+        folder={{ id: '__unfile__', name: 'Unfiled', color: null, pinned: false, locked: false, archived: false, offline: false, createdAt: 0, updatedAt: 0 }}
         count={undefined}
         locked={false}
         onOpen={() => setSelected(null)}
@@ -328,7 +356,10 @@ function MoveEditor({ note, onDone }: { note: Note; onDone: () => void }) {
           }
         />
       ))}
-      <div className="sheet-actions">
+      <div className="sheet-actions sheet-actions-split">
+        <button className="btn btn-ghost" onClick={newFolder}>
+          <Icon name="folder" size={16} /> New folder
+        </button>
         <button
           className="btn btn-primary"
           onClick={async () => {
@@ -352,7 +383,7 @@ function ExportEditor({ note, onDone }: { note: Note; onDone: () => void }) {
   const toast = useToast()
   const [layout, setLayout] = useState<ExportLayout>('document')
   const exportRef = useRef<HTMLDivElement | null>(null)
-  const color = colorOf(note.color)
+  const color = HEX[note.color ?? 'gray']
 
   const doImage = async () => {
     toast.show('Rendering image…')
@@ -408,7 +439,7 @@ function ExportEditor({ note, onDone }: { note: Note; onDone: () => void }) {
               <ExportBlock key={b.id} block={b} />
             ))}
           </div>
-          <div className="export-note-brand">Nimbus</div>
+          <div className="export-note-brand">Noto</div>
         </div>
       </div>
     </div>
@@ -453,7 +484,7 @@ export function FolderActionsSheet({
       />
       <SectionLabel>Color</SectionLabel>
       <div className="sheet-pad">
-        <ColorPicker value={folder.color} onChange={(c) => void repo.updateFolder(folder.id, { color: c })} />
+        <ColorPicker value={folder.color} allowNone onChange={(c) => void repo.updateFolder(folder.id, { color: c })} />
       </div>
       <ActionRow
         icon="pin"
@@ -543,31 +574,71 @@ export function TemplatePickerSheet({
 }) {
   const navigate = useNavigate()
   const toast = useToast()
+  const dialogs = useDialogs()
+  const [custom, setCustom] = useState<CustomTemplate[]>([])
 
-  const pick = async (templateId: string) => {
-    const t = TEMPLATES.find((x) => x.id === templateId)
-    if (!t) return
-    const note = await repo.createNote({
-      folderId,
-      title: t.name,
-      color: t.color,
-      blocks: t.build(),
-    })
+  useEffect(() => {
+    if (open) void getCustomTemplates().then(setCustom)
+  }, [open])
+
+  const create = async (title: string, color: Template['color'], blocks: NoteBlock[]) => {
+    const note = await repo.createNote({ folderId, title, color, blocks })
     onClose()
-    toast.show(`New ${t.name}`, 'check')
+    toast.show('Note created', 'check')
     navigate(`/note/${note.id}`)
+  }
+
+  const pick = async (t: Template) => {
+    await create(t.name, t.color, t.build())
+  }
+
+  const pickCustom = async (t: CustomTemplate) => {
+    await create(t.name, 'blue', structuredClone(t.blocks))
+  }
+
+  const remove = async (t: CustomTemplate) => {
+    const ok = await dialogs.confirm({
+      title: `Delete “${t.name}”?`,
+      message: 'Notes created from it are not affected.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    })
+    if (!ok) return
+    await deleteCustomTemplate(t.id)
+    setCustom((list) => list.filter((x) => x.id !== t.id))
   }
 
   return (
     <Sheet open={open} onClose={onClose} title="Start from a template">
       <div className="template-grid">
         {TEMPLATES.map((t) => (
-          <button key={t.id} className="template-card" onClick={() => void pick(t.id)}>
+          <button key={t.id} className="template-card" onClick={() => void pick(t)}>
             <span className="template-emoji">{t.emoji}</span>
             <span>{t.name}</span>
           </button>
         ))}
       </div>
+      {custom.length > 0 && (
+        <>
+          <div className="sheet-section">Your templates</div>
+          <div className="template-grid">
+            {custom.map((t) => (
+              <div key={t.id} className="template-card template-card-custom">
+                <button className="template-main" onClick={() => void pickCustom(t)}>
+                  <span className="template-emoji">{t.emoji}</span>
+                  <span>{t.name}</span>
+                </button>
+                <button className="template-delete" onClick={() => void remove(t)} aria-label={`Delete ${t.name}`}>
+                  <Icon name="x" size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <p className="settings-note">
+        Save any of your notes as a template from its ··· menu.
+      </p>
     </Sheet>
   )
 }
@@ -586,3 +657,5 @@ export function useFolderCounts() {
 }
 
 export { formatBytes }
+export { Sheet } from './Sheet'
+export { FolderRow } from './cards'

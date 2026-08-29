@@ -6,11 +6,13 @@ import * as repo from '@/core/repo'
 import { storeFile } from '@/core/repo'
 import type { Note, NoteBlock, ChecklistItem, Flashcard } from '@/core/types'
 import { uid, stripHtml, debounce, cn } from '@/core/utils'
+import { palClass } from '@/core/palette'
 import { Icon } from '@/ui/Icon'
 import { TopBar } from '@/ui/TopBar'
-import { RichText } from '@/ui/RichText'
+import { RichText, type RichTextHandle } from '@/ui/RichText'
+import { FormatBar, execOnHandle } from '@/ui/FormatBar'
 import { ChecklistView, FlashcardsEditor } from '@/ui/blocks'
-import { AudioPlayer, FileCard, ImageView, LinkCard } from '@/ui/media'
+import { AudioPlayer, FileCard, ImageView } from '@/ui/media'
 import { NoteActionsSheet } from '@/ui/sheets'
 import { RecordSheet } from '@/ui/RecordSheet'
 import { useDragSort } from '@/ui/useDragSort'
@@ -18,10 +20,13 @@ import { useDialogs, useToast } from '@/ui/Dialogs'
 import { useLock } from '@/ui/Lock'
 import { EmptyState } from '@/ui/cards'
 
+interface BlockHandle extends RichTextHandle {
+  blockId: string
+}
+
 export function NoteEditor() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const dialogs = useDialogs()
   const toast = useToast()
   const { ensureUnlocked, unlocked, gateFailed, retry } = useGate()
 
@@ -31,9 +36,18 @@ export function NoteEditor() {
   const [blocks, setBlocks] = useState<NoteBlock[] | null>(null)
   const [actionsOpen, setActionsOpen] = useState(false)
   const [recordOpen, setRecordOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [formatOpen, setFormatOpen] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const lastPersisted = useRef('')
   const imageInput = useRef<HTMLInputElement | null>(null)
   const fileInput = useRef<HTMLInputElement | null>(null)
+
+  // Registered rich-text handles (one per text block) + the last focused one
+  const handles = useRef(new Map<string, BlockHandle>())
+  const focusedId = useRef<string | null>(null)
+  const lastHandle = useRef<BlockHandle | null>(null)
 
   // Initialize local editing state once the note loads
   useEffect(() => {
@@ -92,17 +106,19 @@ export function NoteEditor() {
     )
   }
 
-  const removeBlock = (blockId: string) => {
+  const removeBlocks = (ids: string[]) => {
     if (!blocks) return
-    const target = blocks.find((b) => b.id === blockId)
-    if (target && (target.type === 'image' || target.type === 'file' || target.type === 'audio')) {
-      void db.files.delete(target.fileId)
+    const doomed = blocks.filter((b) => ids.includes(b.id))
+    for (const t of doomed) {
+      if (t.type === 'image' || t.type === 'file' || t.type === 'audio') void db.files.delete(t.fileId)
     }
     onLocalChange(
       title ?? '',
-      blocks.filter((b) => b.id !== blockId)
+      blocks.filter((b) => !ids.includes(b.id))
     )
   }
+
+  const removeBlock = (blockId: string) => removeBlocks([blockId])
 
   const addBlock = (block: NoteBlock) => {
     if (!blocks) return
@@ -122,13 +138,62 @@ export function NoteEditor() {
     updateBlock(blockId, { type: 'checklist', items } as NoteBlock)
   }
 
-  const sort = useDragSort(blocks?.length ?? 0, (from, to) => {
-    if (!blocks) return
-    const next = [...blocks]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    onLocalChange(title ?? '', next)
-  })
+  const sort = useDragSort(
+    blocks?.length ?? 0,
+    (from, to) => {
+      if (!blocks) return
+      const next = [...blocks]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      onLocalChange(title ?? '', next)
+    },
+    [
+      { selector: '[data-drop="trash"]', id: 'trash' },
+      { selector: '[data-drop="select"]', id: 'select' },
+    ],
+    (index, zone) => {
+      const blockId = blocks?.[index]?.id
+      if (!blockId) return
+      if (zone === 'trash') removeBlock(blockId)
+      if (zone === 'select') {
+        setSelected(new Set([blockId]))
+        setSelectMode(true)
+      }
+    }
+  )
+
+  /* ---------------- format commands (always-visible undo/redo) ---------------- */
+
+  const execLast = (cmd: string, value?: string) => {
+    const h = lastHandle.current
+    if (!h) {
+      toast.show('Tap into some text first')
+      return
+    }
+    const html = execOnHandle(h, cmd, value)
+    if (html !== null) updateBlock(h.blockId, { html })
+  }
+
+  const registerBlock = (blockId: string) => (h: RichTextHandle | null) => {
+    if (h) {
+      const entry: BlockHandle = { ...h, blockId }
+      handles.current.set(h.id, entry)
+      if (focusedId.current === h.id) lastHandle.current = entry
+    } else {
+      for (const [k, v] of handles.current) if (v.blockId === blockId) handles.current.delete(k)
+      if (lastHandle.current?.blockId === blockId) lastHandle.current = null
+    }
+  }
+
+  const onFocusChange = (hid: string | null) => {
+    focusedId.current = hid
+    if (hid) {
+      const h = handles.current.get(hid)
+      if (h) lastHandle.current = h
+    }
+  }
+
+  /* ---------------- add content ---------------- */
 
   const addFiles = async (files: FileList | null, as: 'image' | 'file') => {
     if (!files || files.length === 0) return
@@ -150,12 +215,6 @@ export function NoteEditor() {
     requestAnimationFrame(() => {
       document.querySelector('.editor-scroll')?.scrollTo({ top: 999999, behavior: 'smooth' })
     })
-  }
-
-  const addLink = async () => {
-    const url = await dialogs.prompt({ title: 'Add a link', placeholder: 'https://…', confirmLabel: 'Add' })
-    if (!url) return
-    addBlock({ id: uid('b_'), type: 'link', url })
   }
 
   const addAudio = async (payload: { blob: Blob; mime: string; name: string; duration?: number; transcript?: string }) => {
@@ -220,8 +279,16 @@ export function NoteEditor() {
 
   const ready = title !== null && blocks !== null
 
+  const toggleBlockSelect = (blockId: string) =>
+    setSelected((s) => {
+      const next = new Set(s)
+      if (next.has(blockId)) next.delete(blockId)
+      else next.add(blockId)
+      return next
+    })
+
   return (
-    <div className="screen editor-screen" style={note.color ? { background: 'var(--bg-1)' } : undefined}>
+    <div className={cn('screen editor-screen', palClass(note.color))}>
       <TopBar
         back
         title={
@@ -232,15 +299,21 @@ export function NoteEditor() {
         }
         right={
           <>
+            <button className="icon-btn" onClick={() => execLast('undo')} aria-label="Undo">
+              <Icon name="undo" size={18} />
+            </button>
+            <button className="icon-btn" onClick={() => execLast('redo')} aria-label="Redo">
+              <Icon name="redo" size={18} />
+            </button>
             <button
               className={cn('icon-btn', note.pinned && 'icon-btn-active')}
               onClick={() => void repo.updateNote(note.id, { pinned: !note.pinned })}
               aria-label="Pin note"
             >
-              <Icon name="pin" size={19} />
+              <Icon name="pin" size={18} />
             </button>
             <button className="icon-btn" onClick={() => setActionsOpen(true)} aria-label="Note actions">
-              <Icon name="more-h" size={21} />
+              <Icon name="more-h" size={20} />
             </button>
           </>
         }
@@ -257,21 +330,33 @@ export function NoteEditor() {
 
           <div className="blocks">
             {blocks!.map((b, i) => (
-              <div key={b.id} className="block" {...sort.itemProps(i)}>
-                <div className="block-controls">
-                  <button className="block-handle" {...sort.handleProps(i)} aria-label="Drag to reorder">
+              <div
+                key={b.id}
+                className={cn(
+                  'block',
+                  selectMode && 'block-selectable',
+                  selectMode && selected.has(b.id) && 'block-selected'
+                )}
+                {...sort.itemProps(i)}
+                onClick={selectMode ? () => toggleBlockSelect(b.id) : undefined}
+              >
+                <div className={cn('block-controls', selectMode && 'block-controls-hidden')}>
+                  <button className="block-handle" {...sort.handleProps(i)} aria-label="Drag block">
                     <Icon name="grip" size={16} />
                   </button>
-                  <button className="block-remove" onClick={() => removeBlock(b.id)} aria-label="Remove block">
-                    <Icon name="x" size={14} />
-                  </button>
                 </div>
+                {selectMode && (
+                  <span className="pick block-pick" aria-hidden>
+                    {selected.has(b.id) && <Icon name="check" size={12} strokeWidth={3} />}
+                  </span>
+                )}
                 <div className="block-body">
                   {b.type === 'text' && (
                     <RichText
                       html={b.html}
                       onChange={(html) => updateBlock(b.id, { html })}
-                      onConvertToChecklist={() => convertTextToChecklist(b.id)}
+                      onFocusChange={onFocusChange}
+                      register={registerBlock(b.id)}
                       placeholder={i === 0 && !title ? 'Start writing…' : 'Write something…'}
                     />
                   )}
@@ -282,7 +367,9 @@ export function NoteEditor() {
                     <ImageView
                       fileId={b.fileId}
                       caption={b.caption}
+                      width={b.width}
                       onCaptionChange={(caption) => updateBlock(b.id, { caption })}
+                      onWidthChange={(w) => updateBlock(b.id, { width: w })}
                     />
                   )}
                   {b.type === 'file' && <FileCard fileId={b.fileId} onDelete={() => removeBlock(b.id)} />}
@@ -294,7 +381,7 @@ export function NoteEditor() {
                       onTranscriptChange={(transcript) => updateBlock(b.id, { transcript })}
                     />
                   )}
-                  {b.type === 'link' && <LinkCard url={b.url} title={b.title} />}
+                  {b.type === 'link' && <LinkRow url={b.url} title={b.title} />}
                   {b.type === 'flashcards' && (
                     <FlashcardsEditor
                       cards={b.cards}
@@ -308,7 +395,7 @@ export function NoteEditor() {
           </div>
 
           {blocks!.length === 0 && (
-            <p className="editor-hint">Add text, photos, files, audio or checklists below ↓</p>
+            <p className="editor-hint">Tap anywhere and start writing — or use + below to add photos, files and audio.</p>
           )}
           <div className="editor-bottom-space" />
         </div>
@@ -316,36 +403,155 @@ export function NoteEditor() {
         <div className="editor-loading">Loading…</div>
       )}
 
-      {/* Add-block bar */}
-      <div className="add-bar">
-        <button className="add-btn" onClick={() => addBlock({ id: uid('b_'), type: 'text', html: '' })}>
-          <Icon name="type" size={18} /> Text
-        </button>
-        <button
-          className="add-btn"
-          onClick={() => addBlock({ id: uid('b_'), type: 'checklist', items: [{ id: uid('i_'), text: '', checked: false }] })}
-        >
-          <Icon name="checklist" size={18} /> List
-        </button>
-        <button className="add-btn" onClick={() => imageInput.current?.click()}>
-          <Icon name="image" size={18} /> Image
-        </button>
-        <button className="add-btn" onClick={() => fileInput.current?.click()}>
-          <Icon name="file" size={18} /> File
-        </button>
-        <button className="add-btn" onClick={() => setRecordOpen(true)}>
-          <Icon name="mic" size={18} /> Audio
-        </button>
-        <button className="add-btn" onClick={addLink}>
-          <Icon name="link" size={18} /> Link
-        </button>
-        <button
-          className="add-btn"
-          onClick={() => addBlock({ id: uid('b_'), type: 'flashcards', cards: [{ id: uid('c_'), front: '', back: '' }] })}
-        >
-          <Icon name="cards" size={18} /> Cards
-        </button>
-      </div>
+      {/* Floating drop targets while a block is being dragged */}
+      {sort.dragging && !selectMode && (
+        <>
+          <button className="float-target float-trash" data-drop="trash" aria-label="Delete block">
+            <Icon name="trash" size={20} />
+          </button>
+          <button className="float-target float-select" data-drop="select" aria-label="Select more blocks">
+            <Icon name="selectAll" size={18} />
+          </button>
+          <div className="drop-hint">
+            <Icon name="grip" size={14} /> Drop in the bin to delete · top-right to multi-select
+          </div>
+        </>
+      )}
+
+      {/* ---------------- bottom bar: format ⇄ add ---------------- */}
+      {selectMode ? (
+        <div className="bulk-bar bulk-bar-static editor-bulk">
+          <div className="bulk-bar-info">
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setSelectMode(false)
+                setSelected(new Set())
+              }}
+              aria-label="Exit selection"
+            >
+              <Icon name="x" size={18} />
+            </button>
+            <span>
+              {selected.size} selected
+              <button
+                className="bulk-selectall"
+                onClick={() => setSelected(new Set((blocks ?? []).map((b) => b.id)))}
+              >
+                Select all
+              </button>
+            </span>
+          </div>
+          <div className="bulk-bar-actions">
+            <button
+              className="icon-btn"
+              aria-label="Duplicate selected"
+              onClick={() => {
+                const copies: NoteBlock[] = (blocks ?? [])
+                  .filter((b) => selected.has(b.id))
+                  .map((b) => structuredClone(b))
+                  .map((b) => ({ ...b, id: uid('b_') }))
+                if (blocks) onLocalChange(title ?? '', [...blocks, ...copies])
+                setSelectMode(false)
+                setSelected(new Set())
+              }}
+            >
+              <Icon name="copy" size={17} />
+            </button>
+            <button
+              className="icon-btn"
+              aria-label="Delete selected"
+              onClick={() => {
+                removeBlocks([...selected])
+                setSelectMode(false)
+                setSelected(new Set())
+              }}
+            >
+              <Icon name="trash" size={18} />
+            </button>
+          </div>
+        </div>
+      ) : formatOpen ? (
+        <FormatBar
+          getHandle={() => lastHandle.current}
+          onHtmlChange={(html) => {
+            if (lastHandle.current) updateBlock(lastHandle.current.blockId, { html })
+          }}
+          onConvertToChecklist={() => {
+            if (lastHandle.current) convertTextToChecklist(lastHandle.current.blockId)
+          }}
+        />
+      ) : (
+        <div className="add-bar">
+          <button className="add-btn" onClick={() => setFormatOpen(true)} aria-label="Text formatting">
+            <Icon name="type" size={18} /> <span className="add-btn-fx">Aa</span>
+          </button>
+          <button className="add-btn" onClick={() => setAddOpen((o) => !o)} aria-label="Insert content">
+            <Icon name={addOpen ? 'x' : 'plus'} size={18} /> More
+          </button>
+          <button className="add-btn" onClick={() => setRecordOpen(true)} aria-label="Record audio">
+            <Icon name="mic" size={18} /> Audio
+          </button>
+        </div>
+      )}
+
+      {addOpen && !formatOpen && !selectMode && (
+        <div className="add-pop">
+          <button
+            className="add-pop-btn"
+            onClick={() => {
+              imageInput.current?.click()
+              setAddOpen(false)
+            }}
+          >
+            <Icon name="image" size={17} /> Image
+          </button>
+          <button
+            className="add-pop-btn"
+            onClick={() => {
+              fileInput.current?.click()
+              setAddOpen(false)
+            }}
+          >
+            <Icon name="file" size={17} /> File
+          </button>
+          <button
+            className="add-pop-btn"
+            onClick={() => {
+              setRecordOpen(true)
+              setAddOpen(false)
+            }}
+          >
+            <Icon name="mic" size={17} /> Audio
+          </button>
+          <button
+            className="add-pop-btn"
+            onClick={() => {
+              addBlock({
+                id: uid('b_'),
+                type: 'checklist',
+                items: [{ id: uid('i_'), text: '', checked: false }],
+              })
+              setAddOpen(false)
+            }}
+          >
+            <Icon name="checklist" size={17} /> Checklist
+          </button>
+          <button
+            className="add-pop-btn"
+            onClick={() => {
+              addBlock({
+                id: uid('b_'),
+                type: 'flashcards',
+                cards: [{ id: uid('c_'), front: '', back: '' }],
+              })
+              setAddOpen(false)
+            }}
+          >
+            <Icon name="cards" size={17} /> Flashcards
+          </button>
+        </div>
+      )}
 
       <NoteActionsSheet
         note={note}
@@ -384,6 +590,25 @@ export function NoteEditor() {
         }}
       />
     </div>
+  )
+}
+
+/* Pasted/kept links: compact row, title from URL host when absent. */
+function LinkRow({ url, title }: { url: string; title?: string }) {
+  let host = url
+  try {
+    host = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '')
+  } catch {
+    /* keep raw */
+  }
+  return (
+    <a className="link-row" href={url} target="_blank" rel="noreferrer">
+      <Icon name="link" size={15} />
+      <span className="link-row-text">
+        <b>{title || host}</b>
+        <span>{url}</span>
+      </span>
+    </a>
   )
 }
 

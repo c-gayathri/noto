@@ -338,6 +338,45 @@ const PATHS: Record<string, JSX.Element> = {
     </>
   ),
   star: <path d="M12 2.8l2.9 5.8 6.4 1-4.6 4.5 1.1 6.4L12 17.5l-5.8 3l1.1-6.4L2.7 9.6l6.4-1z" />,
+  shuffle: (
+    <>
+      <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+    </>
+  ),
+  media: (
+    <>
+      <rect x="7" y="3" width="14" height="14" rx="3" fill="currentColor" stroke="none" opacity="0.45" />
+      <rect x="3" y="7" width="14" height="14" rx="3" fill="currentColor" stroke="none" />
+      <path d="M6.5 17.5l3-3.4 2.2 2.3 2-2.2 2.8 3.3z" fill="#fff" stroke="none" />
+      <circle cx="7.8" cy="11" r="1.3" fill="#fff" stroke="none" />
+    </>
+  ),
+  heading: <path d="M5 4v16M19 4v16M5 12h14" />,
+  superscript: (
+    <>
+      <path d="M4 19L12 7l8 12M6.2 15h11.6" />
+      <path d="M17.5 6.5c0-1 .8-1.7 1.75-1.7S21 5.5 21 6.4c0 1.4-3.5 2.1-3.5 4.1h3.7" strokeWidth="1.5" />
+    </>
+  ),
+  subscript: (
+    <>
+      <path d="M4 5l8 12 8-12M6.2 9h11.6" />
+      <path d="M17.5 15.5c0-1 .8-1.7 1.75-1.7S21 14.5 21 15.4c0 1.4-3.5 2.1-3.5 4.1h3.7" strokeWidth="1.5" />
+    </>
+  ),
+  'text-clear': (
+    <>
+      <path d="M4 7V5h13v2M10.5 5v14M13 19h-5" />
+      <path d="M15.5 15.5l5 5m0-5l-5 5" />
+    </>
+  ),
+  selectAll: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="3" stroke-dasharray="3.2 2.6" />
+      <path d="M8.7 12.2l2.3 2.3 4.5-4.8" />
+    </>
+  ),
+  bookmark: <path d="M6.8 3.2h10.4a1.3 1.3 0 011.3 1.3v16.3l-6.5-4.2-6.5 4.2V4.5a1.3 1.3 0 011.3-1.3z" />,
   offline: (
     <>
       <path d="M18 10h-1.3A7.5 7.5 0 104 16.5a5.5 5.5 0 005.5 5.5H18a5 5 0 000-10z" />
@@ -348,6 +387,103 @@ const PATHS: Record<string, JSX.Element> = {
     <>
       <path d="M3 7.5V5a2 2 0 012-2h2.5M14.5 3H17a2 2 0 012 2v2.5M21 14.5V17a2 2 0 01-2 2h-2.5M9.5 21H5a2 2 0 01-2-2v-2.5" />
       <path d="M8.5 9.5h.01M15.5 9.5h.01M8.5 14.2s1.2 1.6 3.5 1.6 3.5-1.6 3.5-1.6" />
+    </>
+  ),
+}
+
+/* Filled counterparts used across lists, cards and nav for a more solid look. */
+const FILLED: Record<string, JSX.Element> = {
+  folder: (
+    <path
+      d="M10.6 3.2c.5-.75 1.35-1.2 2.25-1.2H19a3 3 0 013 3v1H6.2zM3 8.25A3.25 3.25 0 016.25 5h11.5A3.25 3.25 0 0121 8.25v9A3.75 3.75 0 0117.25 21H6.75A3.75 3.75 0 013 17.25z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
+  pin: (
+    <path
+      d="M14.6 2.3a1.6 1.6 0 00-2.26 0l-.62.62a1.6 1.6 0 000 2.26l.18.18-4.06 2.9a2.4 2.4 0 00-2.98.33l-.53.53a1.2 1.2 0 000 1.7L8.6 15.1l-5.4 5.4a.85.85 0 001.2 1.2l5.4-5.4 4.28 4.27a1.2 1.2 0 001.7 0l.53-.53a2.4 2.4 0 00.33-2.98l2.9-4.06.18.18a1.6 1.6 0 002.26 0l.62-.62a1.6 1.6 0 000-2.26z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
+  mic: (
+    <>
+      <rect x="9" y="2.5" width="6" height="12" rx="3" fill="currentColor" stroke="none" />
+      <path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3.2" strokeWidth="2" />
+    </>
+  ),
+  file: (
+    <path
+      d="M13.4 2.2H7A2.8 2.8 0 004.2 5v14A2.8 2.8 0 007 21.8h10a2.8 2.8 0 002.8-2.8V8.6zM13.4 2.2V7a1.6 1.6 0 001.6 1.6h4.8z"
+      fill="currentColor"
+      stroke="none"
+    />
+  ),
+  'file-text': (
+    <>
+      <path
+        d="M13.4 2.2H7A2.8 2.8 0 004.2 5v14A2.8 2.8 0 007 21.8h10a2.8 2.8 0 002.8-2.8V8.6zM13.4 2.2V7a1.6 1.6 0 001.6 1.6h4.8z"
+        fill="currentColor"
+        stroke="none"
+      />
+      <path d="M8.5 13h7M8.5 16.5h7" strokeWidth="1.7" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="9" r="1.8" fill="#fff" stroke="none" />
+      <path d="M5 18.5l4.6-5 3.2 3.4 2.6-2.8L20 18.7a2.5 2.5 0 01-2 1.3H7a2.5 2.5 0 01-2-1.5z" fill="#fff" stroke="none" opacity="0.9" />
+    </>
+  ),
+  headphones: (
+    <>
+      <path d="M4 15v-3.5a8 8 0 0116 0V15" strokeWidth="2" />
+      <rect x="2.8" y="13.5" width="5" height="8" rx="2.4" fill="currentColor" stroke="none" />
+      <rect x="16.2" y="13.5" width="5" height="8" rx="2.4" fill="currentColor" stroke="none" />
+    </>
+  ),
+  cards: (
+    <>
+      <path d="M11.1 2.5a2 2 0 011.8 0l8 4a1.2 1.2 0 010 2.15l-8 4a2 2 0 01-1.8 0l-8-4a1.2 1.2 0 010-2.15z" fill="currentColor" stroke="none" />
+      <path d="M3.4 12.4l7.7 3.85a2 2 0 001.8 0l7.7-3.85a1.15 1.15 0 011.03 2.05l-8.73 4.37a2 2 0 01-1.8 0L2.37 14.45A1.15 1.15 0 013.4 12.4z" fill="currentColor" stroke="none" opacity="0.55" />
+      <path d="M3.4 16.9l7.7 3.85a2 2 0 001.8 0l7.7-3.85a1.15 1.15 0 011.03 2.05l-8.73 4.37a2 2 0 01-1.8 0L2.37 18.95A1.15 1.15 0 013.4 16.9z" fill="currentColor" stroke="none" opacity="0.3" transform="translate(0 -1.2)" />
+    </>
+  ),
+  bell: (
+    <>
+      <path
+        d="M12 2.2a6.6 6.6 0 00-6.6 6.6c0 5.6-2.1 7.4-2.1 7.4a.9.9 0 00.7 1.5h16a.9.9 0 00.7-1.5s-2.1-1.8-2.1-7.4A6.6 6.6 0 0012 2.2z"
+        fill="currentColor"
+        stroke="none"
+      />
+      <path d="M9.9 20.2a2.2 2.2 0 004.2 0z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4.6" y="10.4" width="14.8" height="10.8" rx="3" fill="currentColor" stroke="none" />
+      <path d="M8.2 10.4V7.6a3.8 3.8 0 017.6 0v2.8" strokeWidth="2.2" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M9 3.8h6a1 1 0 011 1V6H8V4.8a1 1 0 011-1z" fill="currentColor" stroke="none" />
+      <path
+        d="M4.5 6h15a1 1 0 010 2h-.6l-.9 11a2.4 2.4 0 01-2.4 2.2H8.4A2.4 2.4 0 016 19l-.9-11h-.6a1 1 0 110-2zm5 4.5v7.2m5-7.2v7.2"
+        fill="currentColor"
+        stroke="none"
+      />
+    </>
+  ),
+  checklist: (
+    <>
+      <rect x="2.5" y="3" width="7" height="7" rx="2" fill="currentColor" stroke="none" />
+      <path d="M4.4 6.4l1.3 1.3 2.2-2.4" stroke="#fff" strokeWidth="1.6" />
+      <rect x="2.5" y="14" width="7" height="7" rx="2" fill="currentColor" stroke="none" />
+      <path d="M4.4 17.4l1.3 1.3 2.2-2.4" stroke="#fff" strokeWidth="1.6" />
+      <path d="M13 6.5h8.5M13 17.5h8.5" strokeWidth="2" />
     </>
   ),
 }
@@ -367,6 +503,26 @@ export function Icon({
   className?: string
   style?: React.CSSProperties
 }) {
+  const filled = FILLED[name]
+  if (filled) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        style={style}
+        aria-hidden
+      >
+        {filled}
+      </svg>
+    )
+  }
   const path = PATHS[name] ?? PATHS['file']
   return (
     <svg

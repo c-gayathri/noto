@@ -16,13 +16,11 @@ export function AudioPlayer({
   duration,
   transcript,
   onTranscriptChange,
-  compact,
 }: {
   fileId: string
   duration?: number
   transcript?: string
   onTranscriptChange?: (t: string) => void
-  compact?: boolean
 }) {
   const url = useFileURL(fileId)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -39,7 +37,7 @@ export function AudioPlayer({
   }
 
   return (
-    <div className={cn('audio-card', compact && 'audio-compact')}>
+    <div className="audio-card">
       <audio
         ref={audioRef}
         src={url ?? undefined}
@@ -101,15 +99,13 @@ export function AudioPlayer({
           onChange={(e) => onTranscriptChange(e.target.value)}
         />
       )}
-      {!onTranscriptChange && transcript && (
-        <p className="audio-transcript-view">{transcript}</p>
-      )}
+      {!onTranscriptChange && transcript && <p className="audio-transcript-view">{transcript}</p>}
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* File card (PDFs, documents, anything else)                         */
+/* File card (PDFs get an inline preview; docs get rename + actions)  */
 /* ------------------------------------------------------------------ */
 
 const KIND_META: Record<string, { icon: string; tint: string; label: string }> = {
@@ -136,87 +132,149 @@ export function FileCard({ fileId, onDelete }: { fileId: string; onDelete?: () =
     const ok = await shareFiles([f], file.name)
     if (!ok) downloadBlob(file.blob, file.name)
   }
+  const rename = async () => {
+    const name = await dialogs.prompt({ title: 'Rename file', initial: file.name, confirmLabel: 'Rename' })
+    if (name) await db.files.update(fileId, { name })
+  }
 
   return (
-    <div className="file-card">
-      <button className="file-icon" style={{ background: meta.tint }} onClick={open}>
-        <Icon name={meta.icon} size={20} />
-      </button>
-      <button className="file-info" onClick={open}>
-        <span className="file-name">{file.name}</span>
-        <span className="file-sub">
-          {meta.label} · {formatBytes(file.size)}
-        </span>
-      </button>
-      <div className="file-actions">
-        <button className="icon-btn" onClick={share} aria-label="Share file">
-          <Icon name="share" size={17} />
+    <div className="file-card-wrap">
+      {kind === 'pdf' && url && (
+        <button className="pdf-preview" onClick={open} title={`Open ${file.name}`}>
+          <iframe src={`${url}#toolbar=0&navpanes=0`} title={file.name} loading="lazy" />
+          <span className="pdf-preview-hint">
+            <Icon name="external" size={13} /> Preview · tap to open
+          </span>
         </button>
-        <button
-          className="icon-btn"
-          onClick={() => downloadBlob(file.blob, file.name)}
-          aria-label="Download"
-        >
-          <Icon name="download" size={17} />
+      )}
+      <div className="file-card">
+        <button className="file-icon" style={{ background: meta.tint }} onClick={open}>
+          <Icon name={meta.icon} size={19} />
         </button>
-        {onDelete && (
-          <button
-            className="icon-btn icon-btn-danger"
-            aria-label="Delete file"
-            onClick={async () => {
-              const ok = await dialogs.confirm({
-                title: 'Delete file?',
-                message: `“${file.name}” will be removed from this note.`,
-                confirmLabel: 'Delete',
-                destructive: true,
-              })
-              if (ok) onDelete()
-            }}
-          >
-            <Icon name="trash" size={17} />
+        <button className="file-info" onClick={open}>
+          <span className="file-name">{file.name}</span>
+          <span className="file-sub">
+            {meta.label} · {formatBytes(file.size)}
+          </span>
+        </button>
+        <div className="file-actions">
+          <button className="icon-btn" onClick={rename} aria-label="Rename file" title="Rename">
+            <Icon name="edit" size={16} />
           </button>
-        )}
+          <button className="icon-btn" onClick={share} aria-label="Share file">
+            <Icon name="share" size={16} />
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => downloadBlob(file.blob, file.name)}
+            aria-label="Download"
+          >
+            <Icon name="download" size={16} />
+          </button>
+          {onDelete && (
+            <button
+              className="icon-btn icon-btn-danger"
+              aria-label="Delete file"
+              onClick={async () => {
+                const ok = await dialogs.confirm({
+                  title: 'Delete file?',
+                  message: `“${file.name}” will be removed from this note.`,
+                  confirmLabel: 'Delete',
+                  destructive: true,
+                })
+                if (ok) onDelete()
+              }}
+            >
+              <Icon name="trash" size={16} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Image + lightbox                                                   */
+/* Image + lightbox + resize                                          */
 /* ------------------------------------------------------------------ */
+
+const WIDTHS = [
+  { key: 40, label: 'S' },
+  { key: 60, label: 'M' },
+  { key: 80, label: 'L' },
+  { key: 100, label: 'Full' },
+]
 
 export function ImageView({
   fileId,
   caption,
+  width,
   onCaptionChange,
+  onWidthChange,
 }: {
   fileId: string
   caption?: string
+  width?: number
   onCaptionChange?: (c: string) => void
+  onWidthChange?: (w: number) => void
 }) {
   const url = useFileURL(fileId)
+  const file = useStoredFile(fileId)
   const [zoom, setZoom] = useState(false)
+  const editable = onCaptionChange !== undefined
+  const w = width ?? 100
 
   return (
     <div className="image-block">
       <div
-        className={cn('image-frame', onCaptionChange && 'image-frame-editable')}
-        onClick={() => onCaptionChange && setZoom(true)}
+        className={cn('image-frame', editable && 'image-frame-editable')}
+        style={{ width: `${w}%` }}
+        onClick={() => editable && setZoom(true)}
       >
-        {url && <img src={url} alt={caption || 'Image'} loading="lazy" />}
+        {url && <img src={url} alt={caption || file?.name || 'Image'} loading="lazy" />}
       </div>
-      {onCaptionChange !== undefined && (
+
+      {editable && (
+        <div className="image-tools">
+          <div className="image-sizes">
+            {WIDTHS.map((opt) => (
+              <button
+                key={opt.key}
+                className={cn('size-chip', w === opt.key && 'size-chip-on')}
+                onClick={() => onWidthChange?.(opt.key)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <button className="icon-btn" onClick={() => setZoom(true)} aria-label="Zoom">
+            <Icon name="search" size={15} />
+          </button>
+        </div>
+      )}
+
+      {onCaptionChange !== undefined ? (
         <input
           className="image-caption"
           placeholder="Add a caption…"
           value={caption ?? ''}
           onChange={(e) => onCaptionChange(e.target.value)}
         />
+      ) : (
+        caption && <p className="image-caption-view">{caption}</p>
       )}
-      {!onCaptionChange && caption && <p className="image-caption-view">{caption}</p>}
+
       {zoom && url && (
         <div className="lightbox" onClick={() => setZoom(false)}>
-          <img src={url} alt={caption || 'Image'} onClick={(e) => e.stopPropagation()} />
+          <div className="lightbox-head" onClick={(e) => e.stopPropagation()}>
+            <span className="lightbox-name">
+              <Icon name="image" size={14} /> {file?.name ?? 'Image'}
+            </span>
+            <button className="icon-btn btn-glass" onClick={() => setZoom(false)} aria-label="Close">
+              <Icon name="x" size={18} />
+            </button>
+          </div>
+          <img src={url} alt={caption || file?.name || 'Image'} onClick={(e) => e.stopPropagation()} />
           <div className="lightbox-actions" onClick={(e) => e.stopPropagation()}>
             <button
               className="btn btn-glass"
@@ -238,9 +296,6 @@ export function ImageView({
               }}
             >
               <Icon name="download" size={16} /> Save
-            </button>
-            <button className="btn btn-glass" onClick={() => setZoom(false)}>
-              <Icon name="x" size={16} /> Close
             </button>
           </div>
         </div>

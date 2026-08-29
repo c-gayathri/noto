@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import type { ChecklistItem, Flashcard } from '@/core/types'
+import { useRef, useState } from 'react'
+import type { ChecklistItem, Flashcard, NoteBlock } from '@/core/types'
 import { uid, cn } from '@/core/utils'
 import { Icon } from './Icon'
-import { useFileURL, useStoredFile } from '@/core/fileStore'
+import { useStoredFile } from '@/core/fileStore'
 import { RichTextView } from './RichText'
 
 /* ------------------------------------------------------------------ */
@@ -19,18 +19,36 @@ export function ChecklistView({
   readOnly?: boolean
 }) {
   const [draft, setDraft] = useState('')
+  const addInput = useRef<HTMLInputElement | null>(null)
 
   const update = (next: ChecklistItem[]) => onChange?.(next)
-  const toggle = (id: string) =>
-    update(items.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)))
-  const setText = (id: string, text: string) =>
-    update(items.map((i) => (i.id === id ? { ...i, text } : i)))
+  const toggle = (id: string) => update(items.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)))
+  const setText = (id: string, text: string) => update(items.map((i) => (i.id === id ? { ...i, text } : i)))
   const remove = (id: string) => update(items.filter((i) => i.id !== id))
-  const add = () => {
+
+  const addAfter = (afterId?: string) => {
+    const item: ChecklistItem = { id: uid('i_'), text: '', checked: false }
+    if (!afterId) {
+      update([...items, item])
+    } else {
+      const idx = items.findIndex((i) => i.id === afterId)
+      const next = [...items]
+      next.splice(idx + 1, 0, item)
+      update(next)
+    }
+    // focus the freshly created input
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLInputElement>(`[data-check-id="${item.id}"]`)
+      el?.focus()
+    })
+  }
+
+  const addFromDraft = () => {
     const text = draft.trim()
     if (!text) return
     update([...items, { id: uid('i_'), text, checked: false }])
     setDraft('')
+    requestAnimationFrame(() => addInput.current?.blur())
   }
 
   const done = items.filter((i) => i.checked).length
@@ -40,9 +58,7 @@ export function ChecklistView({
       <div className="checklist checklist-readonly">
         {items.map((i) => (
           <div key={i.id} className={cn('check-item', i.checked && 'checked')}>
-            <span className="check-box">
-              {i.checked && <Icon name="check" size={12} strokeWidth={3} />}
-            </span>
+            <span className="check-box">{i.checked && <Icon name="check" size={12} strokeWidth={3} />}</span>
             <span className="check-text">{i.text}</span>
           </div>
         ))}
@@ -54,7 +70,9 @@ export function ChecklistView({
     <div className="checklist">
       {items.length > 1 && (
         <div className="check-progress">
-          <span>{done}/{items.length}</span>
+          <span>
+            {done}/{items.length}
+          </span>
         </div>
       )}
       {items.map((i) => (
@@ -64,16 +82,26 @@ export function ChecklistView({
           </button>
           <input
             className="check-text"
+            data-check-id={i.id}
             value={i.text}
             placeholder="Item"
             onChange={(e) => setText(i.id, e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
-                ;(e.target as HTMLInputElement).blur()
-                add()
+                addAfter(i.id)
               }
-              if (e.key === 'Backspace' && i.text === '') remove(i.id)
+              if (e.key === 'Backspace' && i.text === '' && items.length > 1) {
+                e.preventDefault()
+                const idx = items.findIndex((x) => x.id === i.id)
+                remove(i.id)
+                requestAnimationFrame(() => {
+                  const prev = items[idx - 1] ?? items[items.length - 1]
+                  if (prev && prev.id !== i.id) {
+                    document.querySelector<HTMLInputElement>(`[data-check-id="${prev.id}"]`)?.focus()
+                  }
+                })
+              }
             }}
           />
           <button className="check-remove" onClick={() => remove(i.id)} aria-label="Remove item">
@@ -86,14 +114,18 @@ export function ChecklistView({
           <Icon name="plus" size={12} strokeWidth={2.4} />
         </span>
         <input
+          ref={addInput}
           className="check-text"
           placeholder="Add item…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') add()
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              addFromDraft()
+            }
           }}
-          onBlur={add}
+          onBlur={addFromDraft}
         />
       </div>
     </div>
@@ -101,7 +133,7 @@ export function ChecklistView({
 }
 
 /* ------------------------------------------------------------------ */
-/* Flashcards block (editor)                                          */
+/* Flashcards block — preview (card stack) ⇄ edit                     */
 /* ------------------------------------------------------------------ */
 
 export function FlashcardsEditor({
@@ -113,6 +145,18 @@ export function FlashcardsEditor({
   onChange?: (cards: Flashcard[]) => void
   noteId: string
 }) {
+  const [editing, setEditing] = useState(false)
+
+  if (!editing) {
+    return (
+      <FlashcardsPreview
+        cards={cards}
+        noteId={noteId}
+        onEdit={() => setEditing(true)}
+      />
+    )
+  }
+
   const update = (next: Flashcard[]) => onChange?.(next)
   const setCard = (id: string, patch: Partial<Flashcard>) =>
     update(cards.map((c) => (c.id === id ? { ...c, ...patch } : c)))
@@ -125,9 +169,14 @@ export function FlashcardsEditor({
         <span className="cards-count">
           {cards.length} card{cards.length === 1 ? '' : 's'}
         </span>
-        <a className="cards-study-link" href={`/note/${noteId}/study`}>
-          <Icon name="play" size={13} /> Study
-        </a>
+        <span className="cards-head-actions">
+          <a className="cards-study-link" href={`/note/${noteId}/study`}>
+            <Icon name="play" size={12} /> Study
+          </a>
+          <button className="cards-done-link" onClick={() => setEditing(false)}>
+            <Icon name="check" size={13} /> Done
+          </button>
+        </span>
       </div>
       {cards.map((c, idx) => (
         <div key={c.id} className="card-edit">
@@ -161,11 +210,54 @@ export function FlashcardsEditor({
   )
 }
 
+function FlashcardsPreview({
+  cards,
+  noteId,
+  onEdit,
+}: {
+  cards: Flashcard[]
+  noteId: string
+  onEdit: () => void
+}) {
+  const first = cards[0]
+  return (
+    <div className="cards-preview">
+      <div className="cards-stack">
+        <span className="cards-ghost cards-ghost-2" />
+        <span className="cards-ghost cards-ghost-1" />
+        <div className="cards-top">
+          {first ? (
+            <>
+              <span className="cards-q">{first.front || 'Empty card'}</span>
+              <span className="cards-a">{first.back || 'Tap edit to fill'}</span>
+            </>
+          ) : (
+            <span className="cards-q">No cards yet</span>
+          )}
+        </div>
+      </div>
+      <div className="cards-preview-actions">
+        <span className="cards-count">
+          {cards.length} card{cards.length === 1 ? '' : 's'}
+        </span>
+        <span className="cards-head-actions">
+          <a className="cards-study-link" href={`/note/${noteId}/study`}>
+            <Icon name="play" size={12} /> Study
+          </a>
+          <button className="cards-done-link" onClick={onEdit}>
+            <Icon name="edit" size={13} /> Edit
+          </button>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ */
-/* Read-only block renderer — used by export (PDF/image/text prep)    */
+/* Read-only block renderer — used by export                          */
 /* ------------------------------------------------------------------ */
 
-export function ExportBlock({ block }: { block: import('@/core/types').NoteBlock }) {
+export function ExportBlock({ block }: { block: NoteBlock }) {
   switch (block.type) {
     case 'text':
       return <RichTextView html={block.html} />
@@ -178,7 +270,8 @@ export function ExportBlock({ block }: { block: import('@/core/types').NoteBlock
     case 'audio':
       return (
         <div className="export-chip">
-          <Icon name="headphones" size={14} /> Voice note{block.transcript ? ` — ${block.transcript.slice(0, 80)}` : ''}
+          <Icon name="headphones" size={14} /> Voice note
+          {block.transcript ? ` — ${block.transcript.slice(0, 80)}` : ''}
         </div>
       )
     case 'link':
@@ -204,7 +297,10 @@ export function ExportBlock({ block }: { block: import('@/core/types').NoteBlock
 }
 
 function ExportImage({ fileId, caption }: { fileId: string; caption?: string }) {
-  const url = useFileURL(fileId)
+  const [url, setUrl] = useState<string | null>(null)
+  useEffectOnce(() => {
+    void import('@/core/fileStore').then(({ fileURL }) => void fileURL(fileId).then(setUrl))
+  }, [fileId])
   if (!url) return null
   return (
     <figure className="export-image">
@@ -222,4 +318,16 @@ function ExportFileChip({ fileId }: { fileId: string }) {
       <Icon name="file-text" size={14} /> {file.name}
     </div>
   )
+}
+
+function useEffectOnce(fn: () => void, deps: unknown[]) {
+  const ref = useRef(false)
+  const [tick, setTick] = useState(0)
+  if (!ref.current) {
+    ref.current = true
+    Promise.resolve().then(fn)
+  }
+  void deps
+  void tick
+  void setTick
 }

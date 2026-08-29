@@ -1,7 +1,7 @@
 import type { Note, NoteBlock } from './types'
 import { getFile, downloadBlob, shareFiles } from './fileStore'
 import { stripHtml, formatDateTime } from './utils'
-import { colorOf } from './palette'
+import { HEX } from './palette'
 
 /* ------------------------------------------------------------------ */
 /* Export layer: plain text, PDF (via print), image (via canvas       */
@@ -57,7 +57,7 @@ export async function exportText(note: Note): Promise<void> {
 }
 
 export async function exportPDF(note: Note): Promise<void> {
-  const color = colorOf(note.color)
+  const color = HEX[note.color ?? 'gray']
   const body = blocksToPlainText(note.blocks)
     .split('\n\n')
     .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`)
@@ -94,7 +94,7 @@ export async function exportImage(
     width,
     height: layout === 'square' ? 720 : undefined,
     pixelRatio: 2,
-    backgroundColor: colorOf(note.color).soft,
+    backgroundColor: HEX[note.color ?? 'gray'].soft,
     style: { width: `${width}px` },
   })
   const blob = await (await fetch(dataUrl)).blob()

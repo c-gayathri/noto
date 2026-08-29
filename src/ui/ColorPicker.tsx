@@ -1,4 +1,4 @@
-import { PALETTE } from '@/core/palette'
+import { COLOR_KEYS, COLOR_LABELS, HEX, palClass } from '@/core/palette'
 import type { ColorKey } from '@/core/types'
 import { cn } from '@/core/utils'
 import { Icon } from './Icon'
@@ -9,7 +9,7 @@ export function ColorPicker({
   allowNone,
 }: {
   value: ColorKey | null
-  onChange: (c: ColorKey) => void
+  onChange: (c: ColorKey | null) => void
   allowNone?: boolean
 }) {
   return (
@@ -17,22 +17,22 @@ export function ColorPicker({
       {allowNone && (
         <button
           className={cn('color-dot', 'color-none', !value && 'color-dot-active')}
-          onClick={() => onChange('gray')}
-          aria-label="Default"
+          onClick={() => onChange(null)}
+          aria-label="No color"
         >
-          <Icon name="x" size={13} />
+          {!value ? <Icon name="check" size={13} strokeWidth={2.6} /> : <Icon name="x" size={13} />}
         </button>
       )}
-      {PALETTE.map((p) => (
+      {COLOR_KEYS.map((k) => (
         <button
-          key={p.key}
-          className={cn('color-dot', value === p.key && 'color-dot-active')}
-          style={{ background: p.bg }}
-          onClick={() => onChange(p.key)}
-          aria-label={p.label}
+          key={k}
+          className={cn('color-dot', value === k && 'color-dot-active', palClass(k))}
+          style={{ background: HEX[k].bg }}
+          onClick={() => onChange(k)}
+          aria-label={COLOR_LABELS[k]}
         >
-          {value === p.key && (
-            <Icon name="check" size={13} style={{ color: p.fg }} strokeWidth={2.6} />
+          {value === k && (
+            <Icon name="check" size={13} style={{ color: HEX[k].fg }} strokeWidth={2.6} />
           )}
         </button>
       ))}
